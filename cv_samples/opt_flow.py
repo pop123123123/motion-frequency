@@ -98,8 +98,9 @@ def main():
             prevgray, gray, None, 0.5, 3, 15, 3, 5, 1.2, 0)
         prevgray = gray
 
-        data.append(np.absolute(flow).mean(axis=(0,1)))
-    
+        # data.append(np.absolute(flow).mean(axis=(0,1)))#Si plusieurs mouvements, ils peuvent s'annuler
+        data.append(flow.mean(axis=(0, 1)))
+
         cv.imshow('flow', draw_flow(gray, flow))
         if show_hsv:
             cv.imshow('flow HSV', draw_hsv(flow))
@@ -122,31 +123,35 @@ def main():
     print('Done')
     import code
     import matplotlib.pyplot as plt
-    #code.interact(local=locals())
-
-    data = np.linalg.norm(data, axis=1)
-    #data = np.sum(data, axis=1)
+    # code.interact(local=locals())
     t = np.arange(len(data))
-    data = running_mean(data, 3)
-
-    signal = np.array(data)
-    signal -= signal.min()
-    signal /= signal.max()
-    signal = signal*2 - 1
-    #plt.plot(t, signal)
-    #plt.show()
-
     freq = np.fft.rfftfreq(t.shape[-1], 1/rate)
-    first = np.argmax(freq > 1/3)#Can return 0
-    #first = np.argmax(freq > 0)
-    sp = np.fft.rfft(signal)
-    indices = np.unravel_index(np.absolute(sp[first:]).argmax(), sp.shape) + first
-    #code.interact(local=locals())
-    index = indices[0]
+    maxima = np.array([0, 0])
+    indices = np.array([0, 0])
+    for i in range(2):
+        signal = np.array(data)[:, i]
+        #data = np.linalg.norm(data, axis=1)
+        #data = np.sum(data, axis=1)
+        signal = running_mean(signal, 3)
+
+        signal = np.array(signal)
+        #signal -= signal.min()
+        #signal /= signal.max()
+        #signal = signal*2 - 1
+        plt.plot(t, signal)
+        plt.show()
+
+        first = np.argmax(freq > 1/3)  # Can return 0
+        #first = np.argmax(freq > 0)
+        sp = np.fft.rfft(signal)
+        maxima[i] = np.absolute(sp[first:]).max()
+        # code.interact(local=locals())
+        indices[i] = np.unravel_index(np.absolute(
+            sp[first:]).argmax(), sp.shape)[0] + first
 
     #plt.plot(freq, sp.real, freq, sp.imag)
-    #plt.show()
-    print(freq[index])
+    # plt.show()
+    print(freq[indices[maxima.argmax()]])
 
 
 if __name__ == '__main__':
