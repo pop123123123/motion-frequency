@@ -57,6 +57,12 @@ def warp_flow(img, flow):
     res = cv.remap(img, flow, None, cv.INTER_LINEAR)
     return res
 
+def running_mean(x, N):
+    #cumsum = np.cumsum(np.insert(x, 0, 0)) 
+    #return (cumsum[N:] - cumsum[:-N]) / float(N)
+    conv = np.convolve(x, np.ones((N,))/N, mode='valid')
+    return np.concatenate((conv, x[conv.shape[0] - x.shape[0]:]))
+
 def main():
     import sys
     try:
@@ -68,9 +74,11 @@ def main():
     rate = cam.get(cv.CAP_PROP_FPS)
     ret, prev = cam.read()
     realh, realw = prev.shape[:2]
-    h, w = realh//3, realw//3
+    #h, w = realh//3, realw//3
+    h, w = realh, realw
 
-    prevgray = cv.cvtColor(prev, cv.COLOR_BGR2GRAY)[w:2*w,h:2*h]
+    #prevgray = cv.cvtColor(prev, cv.COLOR_BGR2GRAY)[w:2*w,h:2*h]
+    prevgray = cv.cvtColor(prev, cv.COLOR_BGR2GRAY)
     show_hsv = False
     show_glitch = False
     cur_glitch = prev.copy()
@@ -81,13 +89,13 @@ def main():
         ret, img = cam.read()
         if not ret:
             break
-        gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)[w:2*w,h:2*h]
+        #gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)[w:2*w,h:2*h]
+        gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
 
         flow = cv.calcOpticalFlowFarneback(prevgray, gray, None, 0.5, 3, 15, 3, 5, 1.2, 0)
         prevgray = gray
 
-        fx, fy = flow[h//2,w//2]
-        data.append((fx, fy))
+        data.append(np.absolute(flow).mean(axis=(0,1)))
     
         cv.imshow('flow', draw_flow(gray, flow))
         if show_hsv:
@@ -109,14 +117,32 @@ def main():
             print('glitch is', ['off', 'on'][show_glitch])
 
     print('Done')
-    data = np.sum(data, axis=1)
+    import code
+    import matplotlib.pyplot as plt
+    #code.interact(local=locals())
 
+    data = np.linalg.norm(data, axis=1)
+    #data = np.sum(data, axis=1)
     t = np.arange(len(data))
+    data = running_mean(data, 3)
+
     signal = np.array(data)
-    sp = np.fft.rfft(signal)
+    signal -= signal.min()
+    signal /= signal.max()
+    signal = signal*2 - 1
+    #plt.plot(t, signal)
+    #plt.show()
+
     freq = np.fft.rfftfreq(t.shape[-1], 1/rate)
-    indices = np.unravel_index(sp.argmax(), sp.shape)
+    first = np.argmax(freq > 1/3)#Can return 0
+    #first = np.argmax(freq > 0)
+    sp = np.fft.rfft(signal)
+    indices = np.unravel_index(np.absolute(sp[first:]).argmax(), sp.shape) + first
+    #code.interact(local=locals())
     index = indices[0]
+
+    #plt.plot(freq, sp.real, freq, sp.imag)
+    #plt.show()
     print(freq[index])
 
 
