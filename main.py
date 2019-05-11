@@ -1,16 +1,9 @@
 #!/usr/bin/env python
 
 '''
-example to show optical flow
 
 USAGE: opt_flow.py [<video_source>]
 
-Keys:
- 1 - toggle HSV flow visualization
- 2 - toggle glitch
-
-Keys:
-    ESC    - exit
 '''
 
 # Python 2/3 compatibility
@@ -43,6 +36,10 @@ def running_mean(x, N):
     conv = np.convolve(x, np.ones((N,))/N, mode='valid')
     return np.concatenate((conv, x[conv.shape[0] - x.shape[0]:]))
 
+def reduce(image):
+    while image.shape[0]*image.shape[1] > 40000:
+        image = cv.pyrDown(image)
+    return image
 
 def main():
     import sys
@@ -52,11 +49,12 @@ def main():
         fn = 0
 
     cam = video.create_capture(fn)
-    rate = cam.get(cv.CAP_PROP_FPS)
+    rate = cam.get(cv.CAP_PROP_FPS)#/2
     ret, prev = cam.read()
     realh, realw = prev.shape[:2]
+    prev = reduce(prev)
     #h, w = realh//3, realw//3
-    h, w = realh, realw
+    h, w = prev.shape[:2]
 
     #prevgray = cv.cvtColor(prev, cv.COLOR_BGR2GRAY)[w:2*w,h:2*h]
     prevgray = cv.cvtColor(prev, cv.COLOR_BGR2GRAY)
@@ -67,6 +65,7 @@ def main():
         ret, img = cam.read()
         if not ret:
             break
+        img = reduce(img)
         #gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)[w:2*w,h:2*h]
         gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
 
@@ -75,7 +74,16 @@ def main():
         prevgray = gray
 
         # data.append(np.absolute(flow).mean(axis=(0,1)))#Si plusieurs mouvements, ils peuvent s'annuler
-        data.append(flow.mean(axis=(0, 1)))
+        flow0 = flow.mean(axis=(0, 1))
+        maxi = flow.max(axis=(0, 1))
+
+        if len(data) > 0 and np.absolute(maxi).sum() < 12:#skip the next frame
+            data.append(np.stack((data[-1], flow0)).mean(axis=0))
+        data.append(flow0)
+
+        
+        if np.absolute(maxi).sum() < 12:#skip the next frame
+            ret, img = cam.read()
 
         #cv.imshow('flow', draw_flow(gray, flow))
         #ch = cv.waitKey(5)
