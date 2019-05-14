@@ -14,8 +14,9 @@ import cv2 as cv
 import matplotlib.pyplot as plt
 from matplotlib import ticker
 from scipy import signal as sig
+import scipy
 
-from tqdm import tqdm
+from tqdm import tqdm, trange
 import code
 import time
 
@@ -47,7 +48,7 @@ def running_mean(x, N):
     return np.concatenate((conv, x[conv.shape[0] - x.shape[0]:]))
 
 def reduce(image):
-    while image.shape[0]*image.shape[1] > 40000:
+    while image.shape[0]*image.shape[1] > 2000:
         image = cv.pyrDown(image)
     return image
 
@@ -58,19 +59,24 @@ def main():
     except IndexError:
         fn = 0
     try:
-        compute_scene = len(sys.argv[2]) <= 0
+        start_at = int(sys.argv[2])
+    except IndexError:
+        start_at = 0
+    try:
+        compute_scene = len(sys.argv[3]) <= 0
     except IndexError:
         compute_scene = True
 
     if compute_scene:
-        scenelist = getSceneList(fn)
+        scenelist = getSceneList(fn, start_at)
     else:
-        scenelist = [(0, float("inf"))]
+        scenelist = [(start_at, float("inf"))]
     if scenelist is None or len(scenelist) == 0:
-        scenelist = [(0, float("inf"))]
+        scenelist = [(start_at, float("inf"))]
     cam = video.create_capture(fn)
+    cam.set(cv.CAP_PROP_POS_FRAMES, start_at)
     nb_frames = int(cam.get(cv.CAP_PROP_FRAME_COUNT))
-    rate = cam.get(cv.CAP_PROP_FPS)#/2
+    rate = cam.get(cv.CAP_PROP_FPS)
     ret, prev = cam.read()
     realh, realw = prev.shape[:2]
     prev = reduce(prev)
@@ -80,13 +86,17 @@ def main():
     #prevgray = cv.cvtColor(prev, cv.COLOR_BGR2GRAY)[w:2*w,h:2*h]
     prevgray = cv.cvtColor(prev, cv.COLOR_BGR2GRAY)
     
-    pbar = tqdm(total=nb_frames)
+    pbar = tqdm(total=nb_frames-start_at)
 
-    frame = 0
+    frame = start_at
+
     scene_results = []
     for scene_start, scene_end in scenelist:
+        if frame > scene_start:
+            continue
         for i in range(frame, scene_start):
             ret, prev = cam.read()
+            pbar.update(1)
         
         if scene_start - frame > 0:
             prev = reduce(prev)
@@ -127,8 +137,7 @@ def main():
             #ch = cv.waitKey(5)
 
         # code.interact(local=locals())
-        t = np.arange(len(data))
-        freq = np.fft.rfftfreq(t.shape[-1], 1/rate)
+        freq = np.fft.rfftfreq(len(data), 1/rate)
         maxima = None
         freqs = None
         t = None
@@ -140,21 +149,7 @@ def main():
             signal = running_mean(signal, 3)
 
             signal = np.array(signal)
-            #signal -= signal.min()
-            #signal /= signal.max()
-            #signal = signal*2 - 1
-
-            treshold = 1/2
-
             f, t, Zxx = sig.stft(signal, rate, boundary='even', nperseg=min(3*rate, signal.shape[0]), noverlap=min(3*rate-1, signal.shape[0]-1))
-            #Zxx = Zxx * (f>=treshold)[:, np.newaxis]
-
-            #plt.pcolormesh(t, f, np.abs(Zxx), vmin=0)
-            #plt.title('STFT Magnitude')
-            #plt.ylabel('Frequency [Hz]')
-            #plt.xlabel('Time [sec]')
-            #plt.show()
-#scipy.special.erf(z)
             maxi = np.abs(Zxx).max(axis=0)
             if maxima is None:
                 maxima = maxi
@@ -172,7 +167,7 @@ def main():
             #indices[i] = np.unravel_index(np.absolute(
             #    sp[first:]).argmax(), sp.shape)[0] + first
         freq = maxima.argmax(axis=0).choose(freqs)
-        freq = running_mean(freq, min(10, freq.shape[0]))
+        freq = running_mean(freq, min(int(rate), freq.shape[0]))
         #plt.plot(t, freq)
         #plt.show()
         scene_results.append((t + scene_start/rate, freq))

@@ -9,7 +9,7 @@ from scenedetect.stats_manager import StatsManager
 from scenedetect.detectors import ContentDetector
 from scenedetect.frame_timecode import FrameTimecode
 
-def getSceneList(name = "testvideo.mp4"):
+def getSceneList(name = "testvideo.mp4", start_frame=0):
 
     print("Running PySceneDetect API test...")
 
@@ -28,13 +28,13 @@ def getSceneList(name = "testvideo.mp4"):
 
     try:
 
-        #start_time = base_timecode# + 20     # 00:00:00.667
+        start_time = base_timecode + start_frame# + 20     # 00:00:00.667
         #end_time = base_timecode + 20.0     # 00:00:20.000
         # Set video_manager duration to read frames from 00:00:00 to 00:00:20.
-        #video_manager.set_duration(start_time=start_time, end_time=end_time)
+        video_manager.set_duration(start_time=start_time)
 
         # Set downscale factor to improve processing speed.
-        video_manager.set_downscale_factor()
+        video_manager.set_downscale_factor(16)
 
         # Start video_manager.
         video_manager.start()
@@ -55,7 +55,9 @@ def getSceneList(name = "testvideo.mp4"):
                 scene[1].get_timecode(), scene[1].get_frames(),))
         #import code
         #code.interact(local=locals())
-        return [(scene_start.get_frames(), scene_end.get_frames()) for scene_start, scene_end in scene_list]
+        a = [(scene_start.get_frames(), scene_end.get_frames()) for scene_start, scene_end in scene_list]
+        a[-1] = (a[-1][0], a[-1][-1] + start_frame)
+        return a
     finally:
         video_manager.release()
 
